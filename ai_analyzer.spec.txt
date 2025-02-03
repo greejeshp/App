@@ -1,0 +1,86 @@
+# -*- mode: python ; coding: utf-8 -*-
+
+import sys
+from PyInstaller.utils.hooks import collect_all
+
+block_cipher = None
+
+# Collect all necessary data for transformers
+datas = [
+    ('templates', 'templates'),
+]
+
+# Collect all necessary binaries and data for transformers
+binaries = []
+hiddenimports = [
+    'PyQt5.QtWebEngineWidgets',
+    'transformers',
+    'torch',
+    'numpy',
+    'PIL',
+    'docx',
+    'fitz',
+    'pytesseract'
+]
+
+# Add transformers model data
+transformers_model = "facebook/bart-large-cnn"
+model_data = collect_all('transformers')[0]
+datas.extend(model_data)
+
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False
+)
+
+pyz = PYZ(
+    a.pure,
+    a.zipped_data,
+    cipher=block_cipher
+)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='AI_Document_Analyzer',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=None  # You can add an icon file path here if desired
+)
+
+# Create directory structure for additional files
+if sys.platform == 'win32':
+    import shutil
+    import os
+    
+    # Create dist directory if it doesn't exist
+    if not os.path.exists('dist'):
+        os.makedirs('dist')
+    
+    # Copy templates directory
+    if os.path.exists('templates'):
+        shutil.copytree('templates', os.path.join('dist', 'AI_Document_Analyzer', 'templates'), dirs_exist_ok=True)

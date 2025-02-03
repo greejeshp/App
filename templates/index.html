@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Document Analyzer</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .drag-active {
+            border-color: #3B82F6;
+            background-color: #EFF6FF;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
+            <h1 class="text-3xl font-bold text-center mb-8">AI Document Analyzer</h1>
+            
+            <!-- File Upload Section -->
+            <div id="upload-container" 
+                 class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-6"
+                 ondragover="handleDragOver(event)"
+                 ondragleave="handleDragLeave(event)"
+                 ondrop="handleDrop(event)">
+                
+                <div id="upload-prompt">
+                    <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-4"></i>
+                    <p class="text-lg mb-2">Drag and drop your file here</p>
+                    <p class="text-sm text-gray-500 mb-4">or</p>
+                    <label class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded cursor-pointer">
+                        Browse Files
+                        <input type="file" id="file-input" class="hidden" 
+                               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                               onchange="handleFileSelect(event)">
+                    </label>
+                    <p class="text-sm text-gray-500 mt-4">
+                        Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 1GB)
+                    </p>
+                </div>
+
+                <div id="file-info" class="hidden">
+                    <div class="flex items-center justify-center space-x-4">
+                        <i class="fas fa-file text-gray-400"></i>
+                        <span id="filename" class="text-lg"></span>
+                        <button onclick="clearFile()" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <button onclick="processFile()" 
+                            class="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded">
+                        Analyze Content
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loading" class="hidden text-center py-4">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                <p class="mt-4 text-gray-600">Processing your file...</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <span id="error-message"></span>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results" class="hidden space-y-6">
+                <div class="border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4">Summary</h2>
+                    <div id="summary" class="text-gray-700"></div>
+                </div>
+
+                <div class="border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4">Original Text</h2>
+                    <div id="original-text" class="text-gray-700 max-h-96 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFile = null;
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('upload-container').classList.add('drag-active');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('upload-container').classList.remove('drag-active');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('upload-container').classList.remove('drag-active');
+            
+            const file = e.dataTransfer.files[0];
+            handleFile(file);
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            handleFile(file);
+        }
+
+        function handleFile(file) {
+            // Validate file size (1GB limit)
+            if (file.size > 1024 * 1024 * 1024) {
+                showError('File size must be less than 1GB');
+                return;
+            }
+
+            // Validate file type
+            const validTypes = ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 
+                              'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+            if (!validTypes.includes(file.type)) {
+                showError('Invalid file type. Please upload PDF, DOC, DOCX, JPG, or PNG files.');
+                return;
+            }
+
+            currentFile = file;
+            document.getElementById('upload-prompt').classList.add('hidden');
+            document.getElementById('file-info').classList.remove('hidden');
+            document.getElementById('filename').textContent = file.name;
+            hideError();
+        }
+
+        function clearFile() {
+            currentFile = null;
+            document.getElementById('upload-prompt').classList.remove('hidden');
+            document.getElementById('file-info').classList.add('hidden');
+            document.getElementById('results').classList.add('hidden');
+            document.getElementById('file-input').value = '';
+            hideError();
+        }
+
+        async function processFile() {
+            if (!currentFile) return;
+
+            showLoading();
+            hideError();
+
+            const formData = new FormData();
+            formData.append('file', currentFile);
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Error processing file');
+                }
+
+                showResults(data);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function showLoading() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            const errorMessage = document.getElementById('error-message');
+            errorDiv.classList.remove('hidden');
+            errorMessage.textContent = message;
+        }
+
+        function hideError() {
+            document.getElementById('error').classList.add('hidden');
+        }
+
+        function showResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const summaryDiv = document.getElementById('summary');
+            const originalTextDiv = document.getElementById('original-text');
+
+            summaryDiv.textContent = data.summary;
+            originalTextDiv.textContent = data.original_text;
+            resultsDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
